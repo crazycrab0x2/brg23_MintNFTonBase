@@ -30,21 +30,21 @@ const {isLogin} = storeToRefs(authStore);
 const { drawerOpen } = storeToRefs(layoutStore);
 const barItems = [
     {
-        name: "Tesseract",
+        name: "Mint NFT",
         route: "/"
     },
     {
         name: "All NFTs",
         route: "/all-nfts"
     },
-    {
-        name: "Mint NFTs",
-        route: "/mint-nfts"
-    },
-    {
-        name: "Wallet",
-        route: "/wallet"
-    },
+    // {
+    //     name: "Mint NFTs",
+    //     route: "/mint-nfts"
+    // },
+    // {
+    //     name: "Wallet",
+    //     route: "/wallet"
+    // },
 
 ];
 const LogoutItem = {

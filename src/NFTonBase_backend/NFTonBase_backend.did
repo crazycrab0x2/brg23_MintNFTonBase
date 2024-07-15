@@ -43,6 +43,7 @@ type StreamingStrategy = variant {
 service : {
     "whoami": () -> (text) query;
     "upload_image": (text, blob) -> (text);
+    "upload_data": (text, text) -> (text);
     "get_contract": () -> (text);
     "get_evm_address": () -> (text);
     "get_eth_balance": (text) -> (nat64, text);
