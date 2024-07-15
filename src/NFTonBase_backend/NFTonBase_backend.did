@@ -1,0 +1,51 @@
+
+type HttpHeader = record { value : text; name : text };
+// type HttpResponse = record {
+//   status : nat;
+//   body : vec nat8;
+//   headers : vec HttpHeader;
+// };
+type TransformArgs = record { context : vec nat8; response : HttpResponse };
+
+type ByteBuf = vec nat8;
+
+type Image = record {
+    name: text;
+    img: vec nat8;
+};
+
+type HttpRequest = record {
+    method: text;
+    url: text;
+    headers: vec HttpHeader;
+    body: ByteBuf;
+};
+
+type HttpResponse = record {
+    status_code: nat16;
+    headers: vec HttpHeader;
+    body: ByteBuf;
+    // streaming_strategy: opt StreamingStrategy;
+};
+
+type Token = record {};
+
+type Func = service {};
+
+type StreamingStrategy = variant {
+    Callback: record {
+        callback: Func;
+        token: Token;
+    }
+};
+
+
+service : {
+    "whoami": () -> (text) query;
+    "upload_image": (text, blob) -> (text);
+    "get_contract": () -> (text);
+    "get_evm_address": () -> (text);
+    "get_eth_balance": (text) -> (nat64, text);
+    "transform" : (TransformArgs) -> (HttpResponse) query;
+    "http_request": (HttpRequest) -> (HttpResponse) query;
+}
