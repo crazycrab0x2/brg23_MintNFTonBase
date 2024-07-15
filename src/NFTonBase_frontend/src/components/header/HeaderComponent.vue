@@ -42,17 +42,17 @@ const { setIsLogin , setPrincipal} = authStore;
 const { setDrawerOpen } = layoutStore;
 const { isLogin , principal} = storeToRefs(authStore);
 const isLoading = ref(false);
-const title = ref("Tesseract");
+const title = ref("Mint NFT");
 
 watch(()=> route.path, ()=> {
-  if(route.path == '/') title.value = "Tesseract"
+  if(route.path == '/') title.value = "Mint NFT"
   if(route.path == '/mint-nfts') title.value = "Mint NFTs"
   if(route.path == '/all-nfts') title.value = "All NFTs"
   if(route.path == '/wallet') title.value = "Wallet"
 })
 
 onBeforeMount(()=>{
-  if(route.path == '/') title.value = "Tesseract"
+  if(route.path == '/') title.value = "Mint NFT"
   if(route.path == '/mint-nfts') title.value = "Mint NFTs"
   if(route.path == '/all-nfts') title.value = "All NFTs"
   if(route.path == '/wallet') title.value = "Wallet"

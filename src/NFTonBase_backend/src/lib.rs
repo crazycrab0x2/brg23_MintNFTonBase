@@ -22,15 +22,17 @@ use std::str::FromStr;
 mod types;
 
 type ImageStore = BTreeMap<String, Vec<u8>>;
+type ReceiptStore = BTreeMap<String, String>;
+
 thread_local! {
     static IMAGE_STORE: RefCell<ImageStore> = RefCell::default();
+    static RECEIPT_STORE: RefCell<ReceiptStore> = RefCell::default();
 }
 
 const NFT_ABI: &[u8] = include_bytes!("./NFTABI.json");
 const RPC_ENDPOINT: &str = "https://mainnet.base.org";
 const CONTRACT_ADDRESS: &str = "0xaf431cb24485fa30d0b480e2c147ae7a1d84c479";
-const KEY_NAME: &str = "dfx_test_key";
-// const KEY_NAME:&str = "test_key_1";
+const KEY_NAME:&str = "test_key_1";
 // const KEY_NAME:&str = "key_1";
 
 #[derive(Clone, Serialize)]
@@ -54,6 +56,20 @@ async fn upload_image(image_key: String, image_data: Vec<u8>) -> String {
                 .borrow_mut()
                 .insert(image_key.clone(), image_data);
             image_key
+        }
+    })
+}
+
+#[ic_cdk::update]
+async fn upload_data(receipt_key: String, receipt_data: String) -> String {
+    RECEIPT_STORE.with(|receipt_store| {
+        if receipt_store.borrow().get(&receipt_key).is_some() {
+            "data key already exist".to_string()
+        } else {
+            receipt_store
+                .borrow_mut()
+                .insert(receipt_key.clone(), receipt_data);
+            receipt_key
         }
     })
 }
@@ -131,9 +147,30 @@ fn http_request(req: types::HttpRequest) -> types::HttpResponse {
             }
         })
     }
-    // else if req.url.contains("receipt") {
-
-    // }
+    else if req.url.contains("receipt") {
+        let res: Vec<&str> = req.url.split("receipt").collect();
+        let receipt_key = res[1][1..].to_string();
+        RECEIPT_STORE.with(|receipt_store| {
+            if receipt_store.borrow().get(&receipt_key).is_some() {
+                let receipt_data = receipt_store.borrow().get(&receipt_key).unwrap().clone();
+                let mut http_header = req.headers;
+                http_header.push(("CONTENT_TYPE".to_string(), "text/json".to_string()));
+                let response = types::HttpResponse {
+                    headers: http_header,
+                    status_code: 200,
+                    body: receipt_data.as_bytes().to_vec().into(),
+                };
+                response
+            } else {
+                let response = types::HttpResponse {
+                    headers: req.headers,
+                    status_code: 404,
+                    body: b"Image not found!".to_vec().into(),
+                };
+                response
+            }
+        })
+    }
     else {
         let response = types::HttpResponse {
             headers: req.headers,
