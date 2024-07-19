@@ -9,11 +9,6 @@ type TransformArgs = record { context : vec nat8; response : HttpResponse };
 
 type ByteBuf = vec nat8;
 
-type Image = record {
-    name: text;
-    img: vec nat8;
-};
-
 type HttpRequest = record {
     method: text;
     url: text;
@@ -44,9 +39,11 @@ service : {
     "whoami": () -> (text) query;
     "upload_image": (text, blob) -> (text);
     "upload_data": (text, text) -> (text);
-    "get_contract": () -> (text);
-    "get_evm_address": () -> (text);
-    "get_eth_balance": (text) -> (nat64, text);
-    "transform" : (TransformArgs) -> (HttpResponse) query;
+    "get_system_address": () -> (text);
+    "get_evm_address": (text) -> (text);
+    "get_base_eth_balance": (text) -> (nat64, text);
+    "send_base_eth":(text, nat64) -> (text, text);
+    "mint_nft": (text, text) -> (text);
     "http_request": (HttpRequest) -> (HttpResponse) query;
+    "transform" : (TransformArgs) -> (HttpResponse) query;
 }

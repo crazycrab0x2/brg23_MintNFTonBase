@@ -1,5 +1,5 @@
 use serde::Serialize;
-use candid::{CandidType, Func, Deserialize};
+use candid::{CandidType, Deserialize};
 
 use serde_bytes::ByteBuf;
 
@@ -22,13 +22,4 @@ pub struct HttpResponse {
     pub status_code: u16,
     pub headers: Vec<(String, String)>,
     pub body: ByteBuf,
-    // pub streaming_strategy: Option<StreamingStrategy>,
 }
-
-// #[derive(Clone, Debug, CandidType, Deserialize)]
-// pub struct Token {}
-
-// #[derive(Clone, Debug, CandidType, Deserialize)]
-// pub enum StreamingStrategy {
-//     Callback { callback: Func, token: Token },
-// }
