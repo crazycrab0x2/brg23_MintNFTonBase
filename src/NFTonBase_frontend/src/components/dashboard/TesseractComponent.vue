@@ -76,19 +76,13 @@
               autogrow
             />
             <q-btn
+              @click="onMintNFT"
               label="Mint NFT on Base Chain"
               color="primary"
               no-caps
               class="!w-full my-3"
-              @click="onUploadData"
             />
-            <q-input
-              v-model="uploadedDataURL"
-              placeholder="Minted NFT ID"
-              outlined
-              readonly
-              autogrow
-            />
+            <q-input v-model="mintResult" placeholder="Mint result" outlined readonly autogrow />
           </div>
         </transition>
         <q-inner-loading
@@ -117,7 +111,7 @@ import { HttpAgent, Actor } from '@dfinity/agent'
 import { idlFactory } from '@/utils/recognition-backend.did'
 
 const authStore = useAuthStore()
-const { isLogin } = storeToRefs(authStore)
+const { isLogin, ethAddress } = storeToRefs(authStore)
 
 const model = ref(null)
 const imageLink = ref('')
@@ -125,6 +119,7 @@ const detectedJsonData = ref('')
 const visible = ref(false)
 const uploadedImageURL = ref('')
 const uploadedDataURL = ref('')
+const mintResult = ref('')
 const imageByteArray = ref()
 
 const updatedFile = async (uploadFile: any) => {
@@ -170,16 +165,38 @@ const onAnalyzeImage = async () => {
   const actor = Actor.createActor(idlFactory, { agent, canisterId })
   const detectedData = (await actor.send_image_url_to_proxy(uploadedImageURL.value)) as string
   console.log('detectedData', detectedData)
-  detectedJsonData.value = JSON.parse(detectedData).choices[0].message.content
-  console.log('receiptData', JSON.parse(detectedJsonData.value))
+  let resultText = JSON.parse(detectedData).choices[0].message.content
+  let index = resultText.indexOf('{')
+  resultText = resultText.slice(index)
+  index = resultText.lastIndexOf('}')
+  resultText = resultText.substring(0, index + 1)
+  detectedJsonData.value = resultText
+  console.log('receiptData', JSON.parse(resultText))
   visible.value = false
 }
 
 const onUploadData = async () => {
   visible.value = true
+  let receiptJson = JSON.parse(detectedJsonData.value)
+  receiptJson = { ...receiptJson, image_url: uploadedImageURL.value }
+  console.log(receiptJson)
   const docKey = nanoid()
-  const result = (await NFTonBase_backend.upload_data(docKey, detectedJsonData.value)) as string
+  const result = (await NFTonBase_backend.upload_data(
+    docKey,
+    JSON.stringify(receiptJson)
+  )) as string
   uploadedDataURL.value = `https://tkuag-tqaaa-aaaak-akvgq-cai.raw.icp0.io/receipt/${result}`
+  visible.value = false
+}
+
+const onMintNFT = async () => {
+  visible.value = true
+  const result = (await NFTonBase_backend.mint_nft(
+    ethAddress.value,
+    uploadedDataURL.value,
+    1
+  )) as string
+  mintResult.value = result
   visible.value = false
 }
 </script>
