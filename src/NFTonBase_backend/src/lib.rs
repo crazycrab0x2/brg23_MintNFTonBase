@@ -1,21 +1,13 @@
-use http::{Request, Response, StatusCode};
-use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse as HttpResponseCdk,
-    TransformArgs as TransformArgsCdk, TransformContext as TransformContextCdk,
-};
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use ic_web3::{
-    contract::{Contract, Error, Options},
+    contract::{Contract, Options},
     ethabi::ethereum_types::U256,
-    futures::future::OrElse,
     ic::{get_eth_addr, KeyInfo},
     transports::ICHttp,
     types::{Address, TransactionParameters},
     Web3,
 };
-use junobuild_utils::decode_doc_data;
 use serde::Serialize;
-use serde_json::json;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -30,10 +22,11 @@ thread_local! {
 }
 
 const NFT_ABI: &[u8] = include_bytes!("./NFTABI.json");
-const RPC_ENDPOINT: &str = "https://mainnet.base.org";
-const CONTRACT_ADDRESS: &str = "0xaf431cb24485fa30d0b480e2c147ae7a1d84c479";
-const KEY_NAME:&str = "test_key_1";
-// const KEY_NAME:&str = "key_1";
+const RPC_ENDPOINT: &str = "https://base.llamarpc.com";
+const CONTRACT_ADDRESS: &str = "0x1CFEA7ecB518B3e4C5f72f11bc0F8E75A070A5C0";
+const KEY_NAME: &str = "key_1";
+const CHAIN_ID: u64 = 8453;
+const GAS_PRICE: u64 = 10000000;
 
 #[derive(Clone, Serialize)]
 pub struct Contact {
@@ -75,7 +68,7 @@ async fn upload_data(receipt_key: String, receipt_data: String) -> String {
 }
 
 #[ic_cdk::update]
-pub async fn get_evm_address() -> String {
+pub async fn get_system_address() -> String {
     let principal = ic_cdk::api::caller().to_string();
     let derivation: Vec<Vec<u8>> = principal
         .split('-')
@@ -86,7 +79,17 @@ pub async fn get_evm_address() -> String {
 }
 
 #[ic_cdk::update]
-pub async fn get_eth_balance(address: String) -> (u64, String) {
+pub async fn get_evm_address(principal: String) -> String {
+    let derivation: Vec<Vec<u8>> = principal
+        .split('-')
+        .map(|word| word.as_bytes().to_vec())
+        .collect();
+    let res = get_eth_addr(None, Some(derivation), KEY_NAME.to_string()).await;
+    format!("0x{}", hex::encode(res.unwrap()))
+}
+
+#[ic_cdk::update]
+pub async fn get_base_eth_balance(address: String) -> (u64, String) {
     let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
         Ok(v) => Web3::new(v),
         Err(e) => return (0, e.to_string()),
@@ -103,21 +106,128 @@ pub async fn get_eth_balance(address: String) -> (u64, String) {
 }
 
 #[ic_cdk::update]
-pub async fn get_contract() -> String {
+pub async fn send_base_eth(to_add: String, amount: u64) -> (String, String) {
+    let principal = ic_cdk::api::caller().to_string();
+    // ecdsa key info
+    let derivation_path: Vec<Vec<u8>> = principal
+        .split('-')
+        .map(|word| word.as_bytes().to_vec())
+        .collect();
+    // let derivation_path = vec![params.user_name.as_bytes().to_vec()];
+    let key_info = KeyInfo {
+        derivation_path: derivation_path.clone(),
+        key_name: KEY_NAME.to_string(),
+        ecdsa_sign_cycles: Some(21_538_461_538)
+    };
+
+    // get canister eth address
+    let from_addr = get_eth_addr(None, Some(derivation_path), KEY_NAME.to_string())
+        .await
+        .unwrap();
+
+    let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
+        Ok(v) => Web3::new(v),
+        Err(e) => return (e.to_string(), "".to_string()),
+    };
+
+    let tx_catch = w3.eth().transaction_count(from_addr, None).await;
+
+    match tx_catch {
+        Ok(tx_count) => {
+            // construct a transaction
+            let address = &to_add[2..];
+            let to_addr = match Address::from_str(address) {
+                Ok(add) => add,
+                Err(err) => {
+                    return (err.to_string(), "".to_string());
+                }
+            };
+            let tx = TransactionParameters {
+                to: Some(to_addr),
+                nonce: Some(tx_count),
+                value: U256::from(amount),
+                gas_price: Some(U256::from(GAS_PRICE)),
+                gas: U256::from(21000),
+                ..Default::default()
+            };
+
+            // sign the transaction and get serialized transaction + signature
+            let signed_tx_res = w3
+                .accounts()
+                .sign_transaction(tx, hex::encode(from_addr), key_info, CHAIN_ID)
+                .await;
+
+            match signed_tx_res {
+                Ok(signed_tx) => {
+                    let tx_hash_res = w3
+                        .eth()
+                        .send_raw_transaction(signed_tx.raw_transaction)
+                        .await;
+
+                    match tx_hash_res {
+                        Ok(tx_hash) => ("".to_string(), hex::encode(tx_hash)),
+                        Err(error) => {
+                            if error.to_string().contains("already known") {
+                                ("Success".to_string(), "".to_string())
+                            } else {
+                                (error.to_string(), "".to_string())
+                            }
+                        }
+                    }
+                }
+                Err(error) => (error.to_string(), "".to_string()),
+            }
+        }
+        Err(error) => (error.to_string(), "".to_string()),
+    }
+}
+
+#[ic_cdk::update]
+pub async fn mint_nft(to_address: String, uri: String) -> String {
+    let destination_address = Address::from_str(&to_address[2..]).unwrap();
+    
+    let derivation_path: Vec<Vec<u8>> = ic_cdk::api::caller().to_string().split('-').map(|word| word.as_bytes().to_vec()).collect();
+    let from_address = get_eth_addr(None, Some(derivation_path.clone()), KEY_NAME.to_string()).await;
+    let key_info = KeyInfo{ derivation_path, key_name: KEY_NAME.to_string(), ecdsa_sign_cycles: Some(21_538_461_538) };
+
     let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
         Ok(v) => Web3::new(v),
         Err(e) => {
-            return e.to_string();
+            return format!("error during create web3 interface: {}",e.to_string());
         }
     };
     let contract_address = Address::from_str(&CONTRACT_ADDRESS[2..]).unwrap();
+   
     let contract_res = Contract::from_json(w3.eth(), contract_address, NFT_ABI);
+
     match contract_res {
-        Ok(contract) => {
-            // let txhash_res = contract.signed_call("transfer", (to_addr, amount,), options, hex::encode(from_addr.clone()), key_info, chain_id).await;
-            "success".to_string()
+        Ok(contract) => {   
+
+            let tx_count = match w3.eth().transaction_count(from_address.clone().unwrap(), None).await {
+                Ok(v) => v,
+                Err(e) => { return format!("error during getting nonce: {}", e.to_string()); }
+            };
+        
+            let options = Options::with(|op| { 
+                op.gas = Some(U256::from(219431));
+                op.nonce = Some(tx_count);
+                op.gas_price = Some(U256::from(GAS_PRICE));
+            });
+
+            let txhash_res = contract.signed_call("mint", (destination_address, U256::from(1u64), uri,), options, hex::encode(from_address.unwrap()), key_info, CHAIN_ID).await;
+            match txhash_res {
+                Ok(tx_hash) => hex::encode(tx_hash),
+                Err(error) => {
+                    // if error.to_string().contains("already known") {
+                    //     "Success".to_string()
+                    // }
+                    // else{
+                       return format!("error during tx: {}", error.to_string());
+                    // }
+                }
+            }
         }
-        Err(error) => error.to_string(),
+        Err(error) => format!("error during getting contract: {}", error.to_string())
     }
 }
 
@@ -146,8 +256,7 @@ fn http_request(req: types::HttpRequest) -> types::HttpResponse {
                 response
             }
         })
-    }
-    else if req.url.contains("receipt") {
+    } else if req.url.contains("receipt") {
         let res: Vec<&str> = req.url.split("receipt").collect();
         let receipt_key = res[1][1..].to_string();
         RECEIPT_STORE.with(|receipt_store| {
@@ -165,13 +274,12 @@ fn http_request(req: types::HttpRequest) -> types::HttpResponse {
                 let response = types::HttpResponse {
                     headers: req.headers,
                     status_code: 404,
-                    body: b"Image not found!".to_vec().into(),
+                    body: b"Receipt data not found!".to_vec().into(),
                 };
                 response
             }
         })
-    }
-    else {
+    } else {
         let response = types::HttpResponse {
             headers: req.headers,
             status_code: 404,
