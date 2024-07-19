@@ -12,16 +12,6 @@ const router = createRouter({
       path: '/all-nfts',
       component: () => import('@/layouts/MainLayout.vue'),
       children: [{ path: '/all-nfts', component: () => import('@/views/AllNftsView.vue') }],
-    },
-    {
-      path: '/mint-nfts',
-      component: () => import('@/layouts/MainLayout.vue'),
-      children: [{ path: '/mint-nfts', component: () => import('@/views/MintNftsView.vue') }],
-    },
-    {
-      path: '/wallet',
-      component: () => import('@/layouts/MainLayout.vue'),
-      children: [{ path: '/wallet', component: () => import('@/views/WalletView.vue') }],
     }
   ]
 });

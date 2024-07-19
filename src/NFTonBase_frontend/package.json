@@ -27,6 +27,7 @@
     "tesseract.js": "^5.1.0",
     "vue": "^3.4.21",
     "nanoid": "^5.0.7",
+    "ethers": "5.7",
     "vue-router": "^4.3.0"
   },
   "devDependencies": {

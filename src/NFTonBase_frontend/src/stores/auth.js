@@ -1,11 +1,11 @@
-import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
 export const useAuthStore = defineStore({
   id: 'auth',
   state: () => ({
     isLogin: "",
-    principal: ""
+    principal: "",
+    ethAddress: "",
   }),
   actions: {
       setIsLogin(value) {
@@ -13,6 +13,9 @@ export const useAuthStore = defineStore({
       },
       setPrincipal(value) {
           this.principal = value 
+      },
+      setAddress(value) {
+          this.ethAddress = value 
       }
   },
   persist: {
