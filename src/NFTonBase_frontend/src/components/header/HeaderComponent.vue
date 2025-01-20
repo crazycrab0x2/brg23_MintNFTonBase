@@ -69,12 +69,12 @@ const onLogin = async () => {
   isLoading.value = true
   let authClient = await AuthClient.create()
 
-  // const APP_NAME = 'NFID example'
-  // const APP_LOGO = 'https://nfid.one/icons/favicon-96x96.png'
-  // const CONFIG_QUERY = `?applicationName=${APP_NAME}&applicationLogo=${APP_LOGO}`
-  // const identityProvider = `https://nfid.one/authenticate${CONFIG_QUERY}`
+  const APP_NAME = 'NFID example'
+  const APP_LOGO = 'https://nfid.one/icons/favicon-96x96.png'
+  const CONFIG_QUERY = `?applicationName=${APP_NAME}&applicationLogo=${APP_LOGO}`
+  const identityProvider = `https://nfid.one/authenticate${CONFIG_QUERY}`
 
-  const identityProvider = 'https://identity.ic0.app'
+  // const identityProvider = 'https://identity.ic0.app'
 
   authClient.login({
     identityProvider,
