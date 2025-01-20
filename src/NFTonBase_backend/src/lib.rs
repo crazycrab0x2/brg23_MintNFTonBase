@@ -1,6 +1,6 @@
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use ic_web3::{
-    contract::{Contract, Options},
+    contract::{Contract, Options, Error},
     ethabi::ethereum_types::U256,
     ic::{get_eth_addr, KeyInfo},
     transports::ICHttp,
@@ -34,11 +34,15 @@ thread_local! {
 }
 
 const NFT_ABI: &[u8] = include_bytes!("./NFTABI.json");
+const USDC_ABI: &[u8] = include_bytes!("./USDCABI.json");
 const RPC_ENDPOINT: &str = "https://base.drpc.org";
 const CONTRACT_ADDRESS: &str = "0x1CFEA7ecB518B3e4C5f72f11bc0F8E75A070A5C0";
+const USDC_ADDRESS: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const KEY_NAME: &str = "key_1";
 const CHAIN_ID: u64 = 8453;
 const GAS_PRICE: u64 = 50000000;
+const ETH_DECIMAL: f64 = 18.0;
+const USDC_DECIMAL: f64 = 6.0;
 
 #[derive(Clone, Serialize)]
 pub struct Contact {
@@ -101,10 +105,10 @@ pub async fn get_evm_address(principal: String) -> String {
 }
 
 #[ic_cdk::update]
-pub async fn get_base_eth_balance(address: String) -> (u64, String) {
+pub async fn get_base_eth_balance(address: String) -> (f64, String) {
     let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
         Ok(v) => Web3::new(v),
-        Err(e) => return (0, e.to_string()),
+        Err(e) => return (0.0, e.to_string()),
     };
     let evm_address = &address[2..];
     let balance = w3
@@ -112,13 +116,13 @@ pub async fn get_base_eth_balance(address: String) -> (u64, String) {
         .balance(Address::from_str(evm_address).unwrap(), None)
         .await;
     match balance {
-        Ok(bal) => (bal.as_u64(), "".to_string()),
-        Err(err) => (0, err.to_string()),
+        Ok(bal) => (bal.as_u64() as f64 / ETH_DECIMAL, "".to_string()),
+        Err(err) => (0.0, err.to_string()),
     }
 }
 
 #[ic_cdk::update]
-pub async fn send_base_eth(to_add: String, amount: u64) -> (String, String) {
+pub async fn send_base_eth(to_add: String, amount: f64) -> (String, String) {
     let principal = ic_cdk::api::caller().to_string();
     // ecdsa key info
     let derivation_path: Vec<Vec<u8>> = principal
@@ -157,7 +161,7 @@ pub async fn send_base_eth(to_add: String, amount: u64) -> (String, String) {
             let tx = TransactionParameters {
                 to: Some(to_addr),
                 nonce: Some(tx_count),
-                value: U256::from(amount),
+                value: U256::from((amount * ETH_DECIMAL) as u64),
                 gas_price: Some(U256::from(GAS_PRICE)),
                 gas: U256::from(21000),
                 ..Default::default()
@@ -195,6 +199,89 @@ pub async fn send_base_eth(to_add: String, amount: u64) -> (String, String) {
 }
 
 #[ic_cdk::update]
+pub async fn get_usdc_balance(addr: String) -> (f64, String) {
+    let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
+        Ok(v) => { Web3::new(v) },
+        Err(e) => { return (0.0, e.to_string());}
+    };
+    let contract_address = Address::from_str(&USDC_ADDRESS[2..]).unwrap();
+    let contract_res = Contract::from_json(
+        w3.eth(),
+        contract_address,
+        USDC_ABI
+    );
+    match contract_res {
+        Ok(contract) => {
+            let addr = Address::from_str(&addr[2..]).unwrap();
+            let balance_res: Result<U256, Error> = contract.query("balanceOf", (addr,), None, Options::default(), None).await;
+            match balance_res {
+                Ok(balance) => {
+                    (balance.as_u64() as f64 / USDC_DECIMAL, "".to_string())
+                }
+                Err(err) => (0.0, err.to_string())
+            }
+        }
+        Err(error) => (0.0, error.to_string())
+    }
+    
+}
+
+#[ic_cdk::update]
+pub async fn send_usdc(principal: String, amount: f64, destination: String) -> (String, String) {
+    let key_name = "key_1";
+
+    let derivation_path: Vec<Vec<u8>> = principal.split_whitespace().map(|word| word.as_bytes().to_vec()).collect();
+    
+    let from_addr = get_eth_addr(None, Some(derivation_path.clone()), key_name.to_string()).await.unwrap();
+    
+    let key_info = KeyInfo{ derivation_path: derivation_path, key_name: key_name.to_string(), ecdsa_sign_cycles: Some(21_538_461_538) };
+
+    let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
+        Ok(v) => { Web3::new(v) },
+        Err(e) => { return ("".to_string(), e.to_string()) },
+    };
+    let contract_address = Address::from_str(&USDC_ADDRESS[2..]).unwrap();
+    let contract_res = Contract::from_json(
+        w3.eth(),
+        contract_address,
+        USDC_ABI
+    );
+
+    match contract_res {
+        Ok(contract) => {
+            let tx_count = match w3.eth().transaction_count(from_addr, None).await {
+                Ok(v) => v,
+                Err(e) => { return ("".to_string(), e.to_string()); }
+            };
+
+            let options = Options::with(|op| { 
+                op.nonce = Some(tx_count);
+                op.gas_price = Some(U256::from(GAS_PRICE));
+            });
+
+            let to_addr = match Address::from_str(&destination[2..]) {
+                Ok(add) => add,
+                Err(err) => {return ("".to_string(), err.to_string());}
+            };
+
+            let txhash_res = contract.signed_call("transfer", (to_addr, (amount * USDC_DECIMAL) as u64,), options, hex::encode(from_addr.clone()), key_info, CHAIN_ID).await;
+            match txhash_res {
+                Ok(tx_hash) => (hex::encode(tx_hash), "".to_string()),
+                Err(error) => {
+                    if error.to_string().contains("already known") {
+                        ("Success".to_string(), "".to_string())
+                    }
+                    else{
+                        (error.to_string(), "".to_string())
+                    }
+                }
+            }
+        },
+        Err(e) => ("".to_string(), e.to_string())
+    }
+}
+
+#[ic_cdk::update]
 pub async fn mint_nft(to_address: String, uri: String, amount: i32) -> String {
     let destination_address = Address::from_str(&to_address[2..]).unwrap();
 
@@ -208,7 +295,7 @@ pub async fn mint_nft(to_address: String, uri: String, amount: i32) -> String {
     let key_info = KeyInfo {
         derivation_path,
         key_name: KEY_NAME.to_string(),
-        ecdsa_sign_cycles: Some(21_538_461_538),
+        ecdsa_sign_cycles: Some(30_000_000_000),
     };
 
     let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
@@ -344,3 +431,6 @@ pub fn transform(response: TransformArgs) -> HttpResponse {
     t.headers = vec![];
     t
 }
+
+
+ic_cdk::export_candid!();
