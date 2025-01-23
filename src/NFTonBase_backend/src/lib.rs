@@ -234,7 +234,7 @@ pub async fn send_usdc(principal: String, amount: f64, destination: String) -> (
     
     let from_addr = get_eth_addr(None, Some(derivation_path.clone()), key_name.to_string()).await.unwrap();
     
-    let key_info = KeyInfo{ derivation_path: derivation_path, key_name: key_name.to_string(), ecdsa_sign_cycles: Some(21_538_461_538) };
+    let key_info = KeyInfo{ derivation_path: derivation_path, key_name: key_name.to_string(), ecdsa_sign_cycles: Some(30_000_000_000) };
 
     let w3 = match ICHttp::new(RPC_ENDPOINT, None) {
         Ok(v) => { Web3::new(v) },
